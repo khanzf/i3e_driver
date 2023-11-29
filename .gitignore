@@ -1,0 +1,5 @@
+opt_global.h
+exort_syms
+*.swp
+*.ko
+*.o
