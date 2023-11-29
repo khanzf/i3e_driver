@@ -13,7 +13,7 @@ The driver does not implement PCIe, USB or SDIO layers. Rather, everything is im
 On a FreeBSD host, run the following:
 
 ```
-git clone https://github.com/khanzf/i3e_temlate_driver
+git clone https://github.com/khanzf/i3e_template_driver
 cd i3e_template_driver
 make
 make load
