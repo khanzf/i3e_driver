@@ -39,6 +39,8 @@
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
+#include "opt_global.h"
+
 #include <sys/param.h>
 #include <sys/sockio.h>
 #include <sys/sysctl.h>
@@ -102,6 +104,10 @@ i3e_template_detach(struct i3e_template_softc *sc)
 	sc->sc_detached = 1;
 	I3E_TEMPLATE_UNLOCK(sc);
 
+	ieee80211_ifdetach(&sc->sc_ic);
+	mbufq_drain(&sc->sc_snd);
+	mtx_destroy(&sc->sc_mtx);
+
 	return (0);
 }
 
@@ -109,6 +115,7 @@ static int
 i3e_template_init(struct i3e_template_softc *sc)
 {
 	printf("i3e_template_init\n");
+	sc->sc_running = 1;
 	return (0);
 }
 
@@ -118,19 +125,51 @@ i3e_template_stop(struct i3e_template_softc *sc)
 	printf("i3e_template_stop\n");
 }
 
+/*
+ * This is the handler for when a user runs ifconfig wlanX channel [CHAN NUMBER]
+ * Your handler code communicates with the device to change the device channel
+ * Very basic example handler: wi_set_channel
+ * Helper function ieee80211_chan2ieee, converts channel to IEEE channel number
+ */
 static void
 i3e_template_set_channel(struct ieee80211com *ic)
 {
 	struct i3e_template_softc *sc = ic->ic_softc;
 
 	I3E_TEMPLATE_LOCK(sc);
-	printf("i3e_template_set_channel\n");
+	printf("i3e_template_set_channel to %d\n", ieee80211_chan2ieee(ic, ic->ic_curchan));
 	I3E_TEMPLATE_UNLOCK(sc);
 }
 
 /*
+ * Example driver: ural_transmit
+ */
+static int
+i3e_template_transmit(struct ieee80211com *ic, struct mbuf *m)
+{
+	struct i3e_template_softc *sc = ic->ic_softc;
+	int ret = 0;
+
+	I3E_TEMPLATE_LOCK(sc);
+	if (!sc->sc_running) {
+		ret = ENXIO;
+		goto fail;
+	}
+
+	ret = mbufq_enqueue(&sc->sc_snd, m);
+	if (ret) {
+		goto fail;
+	}
+
+//	i3e_template_start(sc);
+fail:
+	I3E_TEMPLATE_UNLOCK(sc);
+	return (ret);
+}
+
+/*
  * Raw Transmission is handled here
- * Come back to this, needs more detail
+ * XXX Come back to this, needs more detail
 */
 static int
 i3e_template_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
@@ -149,7 +188,7 @@ i3e_template_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
 	}
 	/* Raw transmission happens here */
 fail:
-	printf("i3e_template_raw_xmit, return with %d\n", ret);
+//	printf("i3e_template_raw_xmit, return with %d\n", ret);
 	I3E_TEMPLATE_UNLOCK(sc);
 	return (ret);
 }
@@ -210,6 +249,72 @@ i3e_template_scan_end(struct ieee80211com *ic)
 	I3E_TEMPLATE_UNLOCK(sc);
 }
 
+static int
+i3e_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
+{
+	struct i3e_template_vap *ivp = I3E_TEMPLATE_VAP(vap);
+	struct ieee80211com *ic = vap->iv_ic;
+	struct i3e_template_softc *sc = ic->ic_softc;
+	enum ieee80211_state ostate;
+
+	printf("%s: newstate\n", sc->sc_ic.ic_name);
+	// XXX Figure out why the IEEE80211_UNLOCK
+	IEEE80211_UNLOCK(ic);
+	I3E_TEMPLATE_LOCK(sc);
+
+	// Here, we may choose to handle the previous state
+	// The new state, potential values are listed in sys/net80211/ieee80211_proto.h
+	ostate = vap->iv_state;
+
+	switch(ostate) {
+	case IEEE80211_S_INIT:
+		break;
+	case IEEE80211_S_SCAN:
+		break;
+	case IEEE80211_S_AUTH:
+		break;
+	case IEEE80211_S_ASSOC:
+		break;
+	case IEEE80211_S_CAC:
+		break;
+	case IEEE80211_S_RUN:
+		break;
+	case IEEE80211_S_CSA:
+		break;
+	case IEEE80211_S_SLEEP:
+		break;
+	default:
+		break;
+	}
+
+	switch(nstate) {
+	case IEEE80211_S_INIT:
+		break;
+	case IEEE80211_S_SCAN:
+		break;
+	case IEEE80211_S_AUTH:
+		break;
+	case IEEE80211_S_ASSOC:
+		break;
+	case IEEE80211_S_CAC:
+		break;
+	case IEEE80211_S_RUN:
+		break;
+	case IEEE80211_S_CSA:
+		break;
+	case IEEE80211_S_SLEEP:
+		break;
+	default:
+		break;
+	}
+
+	I3E_TEMPLATE_UNLOCK(sc);
+	IEEE80211_LOCK(ic);
+
+	// Also execute the default newstate handler
+	return (ivp->iv_newstate(vap, nstate, arg));
+}
+
 static struct ieee80211vap *
 i3e_template_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 	enum ieee80211_opmode opmode, int flags,
@@ -255,7 +360,9 @@ i3e_template_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int 
 		return (NULL);
 	}
 
-	ivp->newstate = vap->iv_newstate;
+	/* Common practice is to override the default method for changing the state */
+	ivp->iv_newstate = vap->iv_newstate;
+	vap->iv_newstate = i3e_newstate;
 
 	ieee80211_vap_attach(vap, ieee80211_media_change,
 		ieee80211_media_status, mac);
@@ -269,6 +376,8 @@ static int i3e_template_attach(struct i3e_template_softc *sc)
 	struct ieee80211com *ic = &sc->sc_ic; 
 
 	I3E_TEMPLATE_LOCK_INIT(sc);				// Initialize the Mutex lock
+
+	mbufq_init(&sc->sc_snd, ifqmaxlen);
 
 	ic->ic_softc = sc;
 	ic->ic_name = "i3e0";					/* Ordinarily this would be device_get_nameunit(self), but manually setting it because
@@ -321,6 +430,7 @@ static int i3e_template_attach(struct i3e_template_softc *sc)
 	ic->ic_vap_delete = i3e_template_vap_delete;
 	ic->ic_set_channel = i3e_template_set_channel;
 	ic->ic_raw_xmit = i3e_template_raw_xmit;
+	ic->ic_transmit = i3e_template_transmit;
 	ic->ic_update_mcast = i3e_template_update_mcast;
 
 	ieee80211_announce(ic);
@@ -330,26 +440,24 @@ static int i3e_template_attach(struct i3e_template_softc *sc)
 
 static int i3e_event_handler(struct module *module, int event_type, void *arg) {
 
-  int retval = 0;                   // function returns an integer error code, default 0 for OK
+  int retval = 0;					// function returns an integer error code, default 0 for OK
 
-  switch (event_type) {             // event_type is an enum; let's switch on it
-    case MOD_LOAD:                  // if we're loading
+  switch (event_type) {				// event_type is an enum; let's switch on it
+    case MOD_LOAD:					// if we're loading
   	  sc = malloc(sizeof(struct i3e_template_softc), M_80211_VAP, M_WAITOK | M_ZERO);
 	  i3e_template_attach(sc);
-      uprintf("LKM Loaded\n");      // spit out a loading message
       break;
 
-    case MOD_UNLOAD:                // if were unloading
-      uprintf("LKM Unloaded\n");    // spit out an unloading messge
+    case MOD_UNLOAD:				// if were unloading
 	  i3e_template_detach(sc);
       break;
 
-    default:                        // if we're doing anything else
-      retval = EOPNOTSUPP;          // return a 'not supported' error
+    default:						// if we're doing anything else
+      retval = EOPNOTSUPP;			// return a 'not supported' error
       break;
   }
 
-  return(retval);                   // return the appropriate value
+  return(retval);					// return the appropriate value
 
 }
 

@@ -83,8 +83,6 @@
 #include <net/if_media.h>
 #include <net/if_types.h>
 
-/////////////////////////// Header File
-
 /*
  * BSD drivers store driver instance-specific variables in their "softc"
  * structure.
@@ -95,14 +93,25 @@ struct i3e_template_softc {
 
 	int						sc_detached;
 	int						sc_running;
+
+	/*
+	 * mbufq and its associated functions are not clearly defined anywhere. It is an implementation of
+	 * `struct mbuf`. It is a method of queueing frames to be sent in memory prior to sending it.
+	 * The purpose of this is performance, specifically when software operates faster than the hardware
+	 * can push hardware in the data out.
+	 * Its associated functions are located in sys/sys/mbuf.h.
+	 */
+	struct mbufq			sc_snd;
 };
 
 static struct i3e_template_softc *sc;
 
 struct i3e_template_vap {
 	struct ieee80211vap		vap;
-	int	(*newstate)(struct ieee80211vap *, enum ieee80211_state, int);
+	int	(*iv_newstate)(struct ieee80211vap *, enum ieee80211_state, int);
 };
+
+#define I3E_TEMPLATE_VAP(vap)		((struct i3e_template_vap *)(vap))
 
 //#define I3E_TEMPLATE_LOCK_INIT(_sc)	mtx_init(&(sc)->sc_mtx, device_get_nameunit((sc)->sc_dev), MTX_NETWORK_LOCK, MTX_DEF);
 #define I3E_TEMPLATE_LOCK_INIT(_sc)	mtx_init(&(sc)->sc_mtx, "i3e0", MTX_NETWORK_LOCK, MTX_DEF);
