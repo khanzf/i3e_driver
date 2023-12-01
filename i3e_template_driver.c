@@ -34,11 +34,12 @@
  * be responsible for the match, power on/off, state management, etc. Instead, this code
  * implements everything in software.
  *
- */ 
+ */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
+// This file is generated during the build of the driver
 #include "opt_global.h"
 
 #include <sys/param.h>
@@ -97,6 +98,16 @@ i3e_template_vap_delete(struct ieee80211vap *vap)
 	free(ivp, M_80211_VAP);
 }
 
+/*
+ * This function is run when the driver is unloaded.
+ * In our case, this would be `kldunload i3e_template_driver`
+ * Typically we want to:
+ * - Disable any USB, PCIe or SDIO transfers.
+ * - Free any active or pending Tx and Rx data.
+ *   For context, Tx and Rx data are queue's abstracted for mbuf(9)
+ * - XXX Drain sc_snd, trying to understand the difference between Tx/Rx.
+ * - Destroy the sc->sc_mtx mutex
+ */
 static int
 i3e_template_detach(struct i3e_template_softc *sc)
 {
@@ -142,7 +153,44 @@ i3e_template_set_channel(struct ieee80211com *ic)
 }
 
 /*
- * Example driver: ural_transmit
+ * Think of this as the main() function where previously queued mbufs are dequeued and
+ * transmitted over the physical layer.
+ *
+ * The naming convention of DRIVER_start is confusing, but its what everyone does.
+ * Simple example: zyd_start
+ */
+static void
+i3e_template_start(struct i3e_template_softc *sc)
+{
+	return;
+/*
+	struct ieee80211_node *ni;
+	struct mbuf *m;
+
+	// LOCK?
+	if (sc->sc->running == 0)
+		return;
+
+	// Loop through the Queued mbufs
+	while(m = mbufq_dequeue(&sc->sc_snd) != NULL) {
+		ni = (struct ieee80211_node *)m->m_pkthdr.rcvif;
+		//if i3e_template_tx_start(sc, m, ni) != 0)
+		m_freem(m);
+		if_inc_counter(ni->ni_vap->iv_ifp, IFCOUNTER_OERRORS, 1);
+		ieee80211_free_node(ni);
+	}
+*/
+}
+
+/*
+ * This function receives an mbuf of a packet sent to the driver and adds it to
+ * the sc_snd queue.
+ * When a packet is sent to the device, this function will first queue it to sc_snd queue
+ * (see description of sc_snd in the i3e_template_softc for details)
+ *
+ * i3e_template_start will then dequeue all mbufs and do the physical transmission.
+ *
+ * Simple example: ural_transmit
  */
 static int
 i3e_template_transmit(struct ieee80211com *ic, struct mbuf *m)
@@ -161,7 +209,7 @@ i3e_template_transmit(struct ieee80211com *ic, struct mbuf *m)
 		goto fail;
 	}
 
-//	i3e_template_start(sc);
+	i3e_template_start(sc);
 fail:
 	I3E_TEMPLATE_UNLOCK(sc);
 	return (ret);
@@ -193,10 +241,16 @@ fail:
 	return (ret);
 }
 
+// XXX Undocumented
+/*
+ * Multicast frames in 802.11 have a destination address of
+ * FF:FF:FF:FF:FF:FF. This function is not necessary for all devices
+ * but should at least be replaced to avoid a kernel messages
+ * from `null_update_mcast`.
+ */
 static void
 i3e_template_update_mcast(struct ieee80211com *ic)
 {
-	printf("i3e_template_updadte_mcast unimplemented.\n");
 }
 
 /*
@@ -227,6 +281,10 @@ i3e_template_parent(struct ieee80211com *ic)
 		i3e_template_stop(sc);
 }
 
+/*
+ * As the name suggests, this function should set the card into scan-mode
+ * which will seek out stations and listen to for endpoints
+ */
 static void
 i3e_template_scan_start(struct ieee80211com *ic)
 {
@@ -238,6 +296,9 @@ i3e_template_scan_start(struct ieee80211com *ic)
 	I3E_TEMPLATE_UNLOCK(sc);
 }
 
+/*
+ * As the name suggests, this function should set the card out of scan-mode
+ */
 static void
 i3e_template_scan_end(struct ieee80211com *ic)
 {
@@ -249,6 +310,19 @@ i3e_template_scan_end(struct ieee80211com *ic)
 	I3E_TEMPLATE_UNLOCK(sc);
 }
 
+/*
+ * Updating the "state" ie mode of the interface
+ * The device might need a hardware change depending on if its scanning, sleeping, etc
+ * The typical pattern is to gracefully transition from the previous state, then
+ * set the device to the new state.
+ *
+ * nstate is the new state
+ * ostate is the current state in the vap
+ *
+ * The standard pattern is to run the default net80211 newstate
+ * handler.
+ *
+ */
 static int
 i3e_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 {
@@ -258,7 +332,7 @@ i3e_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	enum ieee80211_state ostate;
 
 	printf("%s: newstate\n", sc->sc_ic.ic_name);
-	// XXX Figure out why the IEEE80211_UNLOCK
+	// I am not clear on the locking mechanism below, see here: https://lists.freebsd.org/archives/freebsd-wireless/2023-November/001627.html
 	IEEE80211_UNLOCK(ic);
 	I3E_TEMPLATE_LOCK(sc);
 
@@ -315,6 +389,11 @@ i3e_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	return (ivp->iv_newstate(vap, nstate, arg));
 }
 
+/*
+ * This handler triggers when you create a VAP with
+ * `ifconfig wlan create wlandev i3e0`
+ * It will allocate the VAP, assign VAP handlers, and attach it.
+ */
 static struct ieee80211vap *
 i3e_template_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 	enum ieee80211_opmode opmode, int flags,
@@ -341,7 +420,7 @@ i3e_template_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int 
 		printf("opmode = IEEE80211_M_HOSTAP, Software Access Point\n");
 		break;
 	case IEEE80211_M_MONITOR:
-		printf("opmdoe = IEEE80211_M_MONITOR\n");
+		printf("opmode = IEEE80211_M_MONITOR\n");
 		break;
 	case IEEE80211_M_MBSS:
 		printf("opmode = IEEE80211_M_MBSS\n");
@@ -351,19 +430,24 @@ i3e_template_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int 
 		break;
 	}
 
+	// Allocate the VAP
 	ivp = malloc(sizeof(struct i3e_template_vap), M_80211_VAP, M_WAITOK | M_ZERO);
 	vap = &ivp->vap;
 
 	if (ieee80211_vap_setup(ic, vap, name, unit, opmode, flags, bssid) != 0) {
-		uprintf("i3e_vap_setup failed\n");
+		printf("i3e_vap_setup failed\n");
 		free(ivp, M_80211_VAP);
 		return (NULL);
 	}
 
-	/* Common practice is to override the default method for changing the state */
+	/*
+	 * Common practice is to override the default method for changing
+	 * the state and execute the default after a driver-specific handler
+	 */
 	ivp->iv_newstate = vap->iv_newstate;
 	vap->iv_newstate = i3e_newstate;
 
+	// Tell net80211 that a new VAP has been attached
 	ieee80211_vap_attach(vap, ieee80211_media_change,
 		ieee80211_media_status, mac);
 	ic->ic_opmode = opmode;
@@ -371,9 +455,46 @@ i3e_template_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int 
 	return (vap);
 }
 
+/*
+ * Set the device modes that the physical device is capable of doing
+ * The modes are enumerated in ieee80211_phymode (sys/net80211/_ieee80211.h)
+ *
+ * Simple example: zyd_getradiocaps
+ */
+static void
+i3e_template_getradiocaps(struct ieee80211com *ic, int maxchans, int *nchans, struct ieee80211_channel chans[])
+{
+	uint8_t bands[IEEE80211_MODE_BYTES];
+	memset(bands, 0, sizeof(bands));
+
+	/*
+	 * These are possible options that the device can physically module the signal and its associated frequency
+	 * such as OFDM, CCK, GFSK, and 5GHz and 2GHz.
+	 * The options are located in the enum ieee80211_phymode (sys/net80211/_ieee80211.h)
+	 * - IEEE80211_MODE_AUTO
+	 * - IEEE80211_MODE_11A
+	 * - IEEE80211_MODE_11B
+	 * - IEEE80211_MODE_11G
+	 * - IEEE80211_MODE_FH
+	 * - IEEE80211_MODE_TURBO_A
+	 * - IEEE80211_MODE_TURBO_G
+	 * - IEEE80211_MODE_11NA
+	 * - IEEE80211_MODE_11NG
+	 * - IEEE80211_MODE_HALF
+	 * - IEEE80211_MODE_QUARTER
+	 * - IEEE80211_MODE_VHT_2GHZ
+	 * - IEEE80211_MODE_VHT_5GHZ
+	 */
+
+	setbit(bands, IEEE80211_MODE_11B);
+	setbit(bands, IEEE80211_MODE_11B);
+	setbit(bands, IEEE80211_MODE_11G);
+	ieee80211_add_channels_default_2ghz(chans, maxchans, nchans, bands, 0);
+}
+
 static int i3e_template_attach(struct i3e_template_softc *sc)
 {
-	struct ieee80211com *ic = &sc->sc_ic; 
+	struct ieee80211com *ic = &sc->sc_ic;
 
 	I3E_TEMPLATE_LOCK_INIT(sc);				// Initialize the Mutex lock
 
@@ -381,10 +502,10 @@ static int i3e_template_attach(struct i3e_template_softc *sc)
 
 	ic->ic_softc = sc;
 	ic->ic_name = "i3e0";					/* Ordinarily this would be device_get_nameunit(self), but manually setting it because
-											 * this is not a real driver */ 
+											 * this is not a real driver */
 	ic->ic_phytype = IEEE80211_T_DS;		// Physical type, enum defined in sys/net/80211/_ieee80211.h
 
-	ic->ic_caps = 
+	ic->ic_caps =
 	      IEEE80211_C_STA		/* station mode supported */
 	    | IEEE80211_C_IBSS		/* IBSS mode supported */
 	    | IEEE80211_C_MONITOR	/* monitor mode supported */
@@ -399,23 +520,15 @@ static int i3e_template_attach(struct i3e_template_softc *sc)
 	    | IEEE80211_C_PMGT		/* Station-side power mgmt */
 	    ;
 
-	ic->ic_cryptocaps = 
+	ic->ic_cryptocaps =
 	    IEEE80211_CRYPTO_WEP |
 	    IEEE80211_CRYPTO_AES_CCM |
 	    IEEE80211_CRYPTO_TKIPMIC |
 	    IEEE80211_CRYPTO_TKIP;
 
-	//ic->ic_phytype = IEEE80211_T_OFDM;	/* not only, but not used */
 	ic->ic_opmode = IEEE80211_M_STA;	/* default to BSS mode */
-//rum_getradiocaps(ic, IEEE80211_CHAN_MAX, &ic->ic_nchans,
-//559        ic->ic_channels);
 
-
-	uint8_t bands[IEEE80211_MODE_BYTES];
-	memset(bands, 0, sizeof(bands));
-	setbit(bands, IEEE80211_MODE_11B);
-//	setbit(bands, IEEE80211_MODE_11G);
-	ieee80211_add_channels_default_2ghz(ic->ic_channels, IEEE80211_CHAN_MAX, &ic->ic_nchans, bands, 0);
+	i3e_template_getradiocaps(ic, IEEE80211_CHAN_MAX, &ic->ic_nchans, ic->ic_channels);
 
 	// Set the MAC address
 	uint8_t macaddr[6] = {0x00, 0x12, 0x34, 0x56, 0x78, 0x9a};
@@ -423,14 +536,14 @@ static int i3e_template_attach(struct i3e_template_softc *sc)
 
 	ieee80211_ifattach(ic);
 	// Counter-intuitively, these must be added afterwards because there are default ieee80211com handlers
-	ic->ic_parent = i3e_template_parent;	// Defines what happens when a driver goes up/down
-	ic->ic_scan_start =	i3e_template_scan_start;	// Puts the device into scan-mode
-	ic->ic_scan_end = i3e_template_scan_end;		// Removes device from scan-mode
-	ic->ic_vap_create = i3e_template_vap_create;
-	ic->ic_vap_delete = i3e_template_vap_delete;
-	ic->ic_set_channel = i3e_template_set_channel;
+	ic->ic_parent = i3e_template_parent;				// Defines what happens when a driver goes up/down
+	ic->ic_scan_start =	i3e_template_scan_start;		// Puts the device into scan-mode
+	ic->ic_scan_end = i3e_template_scan_end;			// Removes device from scan-mode
+	ic->ic_vap_create = i3e_template_vap_create;		// Creates the VAP when you run `ifconfig wlan create wlandev i3e0`
+	ic->ic_vap_delete = i3e_template_vap_delete;		// Opposite, deletes the VAP when you run `ifconfig wlan0 destroy`
+	ic->ic_set_channel = i3e_template_set_channel;		// Change the channel
 	ic->ic_raw_xmit = i3e_template_raw_xmit;
-	ic->ic_transmit = i3e_template_transmit;
+	ic->ic_transmit = i3e_template_transmit;			// Ordered packet transfer
 	ic->ic_update_mcast = i3e_template_update_mcast;
 
 	ieee80211_announce(ic);
@@ -440,7 +553,7 @@ static int i3e_template_attach(struct i3e_template_softc *sc)
 
 static int i3e_event_handler(struct module *module, int event_type, void *arg) {
 
-  int retval = 0;					// function returns an integer error code, default 0 for OK
+  int ret = 0;						// function returns an integer error code, default 0 for OK
 
   switch (event_type) {				// event_type is an enum; let's switch on it
     case MOD_LOAD:					// if we're loading
@@ -450,14 +563,16 @@ static int i3e_event_handler(struct module *module, int event_type, void *arg) {
 
     case MOD_UNLOAD:				// if were unloading
 	  i3e_template_detach(sc);
+	  // This free is handled by the FreeBSD's driver, but we have to manually simulate it here
+	  free(sc, M_80211_VAP);
       break;
 
-    default:						// if we're doing anything else
-      retval = EOPNOTSUPP;			// return a 'not supported' error
+    default:
+      ret = EOPNOTSUPP;
       break;
   }
 
-  return(retval);					// return the appropriate value
+  return(ret);					// return the appropriate value
 
 }
 

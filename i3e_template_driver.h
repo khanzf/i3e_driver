@@ -106,6 +106,7 @@ struct i3e_template_softc {
 
 static struct i3e_template_softc *sc;
 
+// This structure overrides ieee80211vap, so an instance of it must come first.
 struct i3e_template_vap {
 	struct ieee80211vap		vap;
 	int	(*iv_newstate)(struct ieee80211vap *, enum ieee80211_state, int);
