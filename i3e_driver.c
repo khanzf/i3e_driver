@@ -87,20 +87,20 @@ __FBSDID("$FreeBSD$");
 #include <net/if_media.h>
 #include <net/if_types.h>
 
-#include "i3e_template_driver.h"
+#include "i3e_driver.h"
 
 // This function triggers whenever you run ifconfig wlan0 destroy
 static void
-i3e_template_vap_delete(struct ieee80211vap *vap)
+i3e_vap_delete(struct ieee80211vap *vap)
 {
-	struct i3e_template_vap	*ivp = I3E_TEMPLATE_VAP(vap);
+	struct i3e_vap	*ivp = I3E_VAP(vap);
 	ieee80211_vap_detach(vap);			// Minimum needed to delete the VAP
 	free(ivp, M_80211_VAP);
 }
 
 /*
  * This function is run when the driver is unloaded.
- * In our case, this would be `kldunload i3e_template_driver`
+ * In our case, this would be `kldunload i3e_driver`
  * Typically we want to:
  * - Disable any USB, PCIe or SDIO transfers.
  * - Free any active or pending Tx and Rx data.
@@ -109,11 +109,11 @@ i3e_template_vap_delete(struct ieee80211vap *vap)
  * - Destroy the sc->sc_mtx mutex
  */
 static int
-i3e_template_detach(struct i3e_template_softc *sc)
+i3e_detach(struct i3e_softc *sc)
 {
-	I3E_TEMPLATE_LOCK(sc);
+	I3E_LOCK(sc);
 	sc->sc_detached = 1;
-	I3E_TEMPLATE_UNLOCK(sc);
+	I3E_UNLOCK(sc);
 
 	ieee80211_ifdetach(&sc->sc_ic);
 	mbufq_drain(&sc->sc_snd);
@@ -123,17 +123,17 @@ i3e_template_detach(struct i3e_template_softc *sc)
 }
 
 static int
-i3e_template_init(struct i3e_template_softc *sc)
+i3e_init(struct i3e_softc *sc)
 {
-	printf("i3e_template_init\n");
+	printf("i3e_init\n");
 	sc->sc_running = 1;
 	return (0);
 }
 
 static void
-i3e_template_stop(struct i3e_template_softc *sc)
+i3e_stop(struct i3e_softc *sc)
 {
-	printf("i3e_template_stop\n");
+	printf("i3e_stop\n");
 }
 
 /*
@@ -143,13 +143,13 @@ i3e_template_stop(struct i3e_template_softc *sc)
  * Helper function ieee80211_chan2ieee, converts channel to IEEE channel number
  */
 static void
-i3e_template_set_channel(struct ieee80211com *ic)
+i3e_set_channel(struct ieee80211com *ic)
 {
-	struct i3e_template_softc *sc = ic->ic_softc;
+	struct i3e_softc *sc = ic->ic_softc;
 
-	I3E_TEMPLATE_LOCK(sc);
-	printf("i3e_template_set_channel to %d\n", ieee80211_chan2ieee(ic, ic->ic_curchan));
-	I3E_TEMPLATE_UNLOCK(sc);
+	I3E_LOCK(sc);
+	printf("i3e_set_channel to %d\n", ieee80211_chan2ieee(ic, ic->ic_curchan));
+	I3E_UNLOCK(sc);
 }
 
 /*
@@ -160,7 +160,7 @@ i3e_template_set_channel(struct ieee80211com *ic)
  * Simple example: zyd_start
  */
 static void
-i3e_template_start(struct i3e_template_softc *sc)
+i3e_start(struct i3e_softc *sc)
 {
 	return;
 /*
@@ -174,7 +174,7 @@ i3e_template_start(struct i3e_template_softc *sc)
 	// Loop through the Queued mbufs
 	while(m = mbufq_dequeue(&sc->sc_snd) != NULL) {
 		ni = (struct ieee80211_node *)m->m_pkthdr.rcvif;
-		//if i3e_template_tx_start(sc, m, ni) != 0)
+		//if i3e_tx_start(sc, m, ni) != 0)
 		m_freem(m);
 		if_inc_counter(ni->ni_vap->iv_ifp, IFCOUNTER_OERRORS, 1);
 		ieee80211_free_node(ni);
@@ -186,19 +186,19 @@ i3e_template_start(struct i3e_template_softc *sc)
  * This function receives an mbuf of a packet sent to the driver and adds it to
  * the sc_snd queue.
  * When a packet is sent to the device, this function will first queue it to sc_snd queue
- * (see description of sc_snd in the i3e_template_softc for details)
+ * (see description of sc_snd in the i3e_softc for details)
  *
- * i3e_template_start will then dequeue all mbufs and do the physical transmission.
+ * i3e_start will then dequeue all mbufs and do the physical transmission.
  *
  * Simple example: ural_transmit
  */
 static int
-i3e_template_transmit(struct ieee80211com *ic, struct mbuf *m)
+i3e_transmit(struct ieee80211com *ic, struct mbuf *m)
 {
-	struct i3e_template_softc *sc = ic->ic_softc;
+	struct i3e_softc *sc = ic->ic_softc;
 	int ret = 0;
 
-	I3E_TEMPLATE_LOCK(sc);
+	I3E_LOCK(sc);
 	if (!sc->sc_running) {
 		ret = ENXIO;
 		goto fail;
@@ -209,9 +209,9 @@ i3e_template_transmit(struct ieee80211com *ic, struct mbuf *m)
 		goto fail;
 	}
 
-	i3e_template_start(sc);
+	i3e_start(sc);
 fail:
-	I3E_TEMPLATE_UNLOCK(sc);
+	I3E_UNLOCK(sc);
 	return (ret);
 }
 
@@ -220,24 +220,24 @@ fail:
  * XXX Come back to this, needs more detail
 */
 static int
-i3e_template_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
+i3e_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
 	const struct ieee80211_bpf_params *params)
 {
 	struct ieee80211com *ic = ni->ni_ic;
-	struct i3e_template_softc *sc = ic->ic_softc;
+	struct i3e_softc *sc = ic->ic_softc;
 	int ret = 0;
 
 
 	/* this prevents management frames from being sent if we are not ready */
-	I3E_TEMPLATE_LOCK(sc);
+	I3E_LOCK(sc);
 	if (!(sc->sc_running)) {
 		ret = ENETDOWN;
 		goto fail;
 	}
 	/* Raw transmission happens here */
 fail:
-//	printf("i3e_template_raw_xmit, return with %d\n", ret);
-	I3E_TEMPLATE_UNLOCK(sc);
+//	printf("i3e_raw_xmit, return with %d\n", ret);
+	I3E_UNLOCK(sc);
 	return (ret);
 }
 
@@ -249,7 +249,7 @@ fail:
  * from `null_update_mcast`.
  */
 static void
-i3e_template_update_mcast(struct ieee80211com *ic)
+i3e_update_mcast(struct ieee80211com *ic)
 {
 }
 
@@ -259,26 +259,26 @@ i3e_template_update_mcast(struct ieee80211com *ic)
  * The basic structure below is replicated in most drivers
  */
 static void
-i3e_template_parent(struct ieee80211com *ic)
+i3e_parent(struct ieee80211com *ic)
 {
-	struct i3e_template_softc *sc = ic->ic_softc;
+	struct i3e_softc *sc = ic->ic_softc;
 	struct ieee80211vap *vap = TAILQ_FIRST(&ic->ic_vaps);
-	printf("i3e_template_parent\n");
+	printf("i3e_parent\n");
 
-	I3E_TEMPLATE_LOCK(sc);
+	I3E_LOCK(sc);
 	if (sc->sc_detached) { // If the device is already detached,
-		I3E_TEMPLATE_UNLOCK(sc);
+		I3E_UNLOCK(sc);
 		return;
 	}
-	I3E_TEMPLATE_UNLOCK(sc);
+	I3E_UNLOCK(sc);
 
 	if (ic->ic_nrunning > 0) {
-		if (i3e_template_init(sc) == 0)
+		if (i3e_init(sc) == 0)
 			ieee80211_start_all(ic);
 		else
 			ieee80211_stop(vap);
 	} else
-		i3e_template_stop(sc);
+		i3e_stop(sc);
 }
 
 /*
@@ -286,28 +286,28 @@ i3e_template_parent(struct ieee80211com *ic)
  * which will seek out stations and listen to for endpoints
  */
 static void
-i3e_template_scan_start(struct ieee80211com *ic)
+i3e_scan_start(struct ieee80211com *ic)
 {
-	struct i3e_template_softc *sc = ic->ic_softc;
+	struct i3e_softc *sc = ic->ic_softc;
 
-	I3E_TEMPLATE_LOCK(sc);
+	I3E_LOCK(sc);
 	// Typically here we would send a command to the device to Start the device into scan-mode
 	printf("%s: Scan Start\n", sc->sc_ic.ic_name);
-	I3E_TEMPLATE_UNLOCK(sc);
+	I3E_UNLOCK(sc);
 }
 
 /*
  * As the name suggests, this function should set the card out of scan-mode
  */
 static void
-i3e_template_scan_end(struct ieee80211com *ic)
+i3e_scan_end(struct ieee80211com *ic)
 {
-	struct i3e_template_softc *sc = ic->ic_softc;
+	struct i3e_softc *sc = ic->ic_softc;
 
-	I3E_TEMPLATE_LOCK(sc);
+	I3E_LOCK(sc);
 	// Typically here we would send a command to the device to stop the device into scan-mode
 	printf("%s: Scan End\n", sc->sc_ic.ic_name);
-	I3E_TEMPLATE_UNLOCK(sc);
+	I3E_UNLOCK(sc);
 }
 
 /*
@@ -326,15 +326,15 @@ i3e_template_scan_end(struct ieee80211com *ic)
 static int
 i3e_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 {
-	struct i3e_template_vap *ivp = I3E_TEMPLATE_VAP(vap);
+	struct i3e_vap *ivp = I3E_VAP(vap);
 	struct ieee80211com *ic = vap->iv_ic;
-	struct i3e_template_softc *sc = ic->ic_softc;
+	struct i3e_softc *sc = ic->ic_softc;
 	enum ieee80211_state ostate;
 
 	printf("%s: newstate\n", sc->sc_ic.ic_name);
 	// I am not clear on the locking mechanism below, see here: https://lists.freebsd.org/archives/freebsd-wireless/2023-November/001627.html
 	IEEE80211_UNLOCK(ic);
-	I3E_TEMPLATE_LOCK(sc);
+	I3E_LOCK(sc);
 
 	// Here, we may choose to handle the previous state
 	// The new state, potential values are listed in sys/net80211/ieee80211_proto.h
@@ -382,7 +382,7 @@ i3e_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 		break;
 	}
 
-	I3E_TEMPLATE_UNLOCK(sc);
+	I3E_UNLOCK(sc);
 	IEEE80211_LOCK(ic);
 
 	// Also execute the default newstate handler
@@ -395,13 +395,13 @@ i3e_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
  * It will allocate the VAP, assign VAP handlers, and attach it.
  */
 static struct ieee80211vap *
-i3e_template_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
+i3e_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 	enum ieee80211_opmode opmode, int flags,
 	const uint8_t bssid[IEEE80211_ADDR_LEN],
 	const uint8_t mac[IEEE80211_ADDR_LEN])
 {
 	struct ieee80211vap *vap;
-	struct i3e_template_vap *ivp;
+	struct i3e_vap *ivp;
 
 	switch(opmode) {
 	case IEEE80211_M_IBSS:
@@ -431,7 +431,7 @@ i3e_template_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int 
 	}
 
 	// Allocate the VAP
-	ivp = malloc(sizeof(struct i3e_template_vap), M_80211_VAP, M_WAITOK | M_ZERO);
+	ivp = malloc(sizeof(struct i3e_vap), M_80211_VAP, M_WAITOK | M_ZERO);
 	vap = &ivp->vap;
 
 	if (ieee80211_vap_setup(ic, vap, name, unit, opmode, flags, bssid) != 0) {
@@ -462,7 +462,7 @@ i3e_template_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int 
  * Simple example: zyd_getradiocaps
  */
 static void
-i3e_template_getradiocaps(struct ieee80211com *ic, int maxchans, int *nchans, struct ieee80211_channel chans[])
+i3e_getradiocaps(struct ieee80211com *ic, int maxchans, int *nchans, struct ieee80211_channel chans[])
 {
 	uint8_t bands[IEEE80211_MODE_BYTES];
 	memset(bands, 0, sizeof(bands));
@@ -492,11 +492,11 @@ i3e_template_getradiocaps(struct ieee80211com *ic, int maxchans, int *nchans, st
 	ieee80211_add_channels_default_2ghz(chans, maxchans, nchans, bands, 0);
 }
 
-static int i3e_template_attach(struct i3e_template_softc *sc)
+static int i3e_attach(struct i3e_softc *sc)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
 
-	I3E_TEMPLATE_LOCK_INIT(sc);				// Initialize the Mutex lock
+	I3E_LOCK_INIT(sc);				// Initialize the Mutex lock
 
 	mbufq_init(&sc->sc_snd, ifqmaxlen);
 
@@ -528,7 +528,7 @@ static int i3e_template_attach(struct i3e_template_softc *sc)
 
 	ic->ic_opmode = IEEE80211_M_STA;	/* default to BSS mode */
 
-	i3e_template_getradiocaps(ic, IEEE80211_CHAN_MAX, &ic->ic_nchans, ic->ic_channels);
+	i3e_getradiocaps(ic, IEEE80211_CHAN_MAX, &ic->ic_nchans, ic->ic_channels);
 
 	// Set the MAC address
 	uint8_t macaddr[6] = {0x00, 0x12, 0x34, 0x56, 0x78, 0x9a};
@@ -536,15 +536,15 @@ static int i3e_template_attach(struct i3e_template_softc *sc)
 
 	ieee80211_ifattach(ic);
 	// Counter-intuitively, these must be added afterwards because there are default ieee80211com handlers
-	ic->ic_parent = i3e_template_parent;				// Defines what happens when a driver goes up/down
-	ic->ic_scan_start =	i3e_template_scan_start;		// Puts the device into scan-mode
-	ic->ic_scan_end = i3e_template_scan_end;			// Removes device from scan-mode
-	ic->ic_vap_create = i3e_template_vap_create;		// Creates the VAP when you run `ifconfig wlan create wlandev i3e0`
-	ic->ic_vap_delete = i3e_template_vap_delete;		// Opposite, deletes the VAP when you run `ifconfig wlan0 destroy`
-	ic->ic_set_channel = i3e_template_set_channel;		// Change the channel
-	ic->ic_raw_xmit = i3e_template_raw_xmit;
-	ic->ic_transmit = i3e_template_transmit;			// Ordered packet transfer
-	ic->ic_update_mcast = i3e_template_update_mcast;
+	ic->ic_parent = i3e_parent;				// Defines what happens when a driver goes up/down
+	ic->ic_scan_start =	i3e_scan_start;		// Puts the device into scan-mode
+	ic->ic_scan_end = i3e_scan_end;			// Removes device from scan-mode
+	ic->ic_vap_create = i3e_vap_create;		// Creates the VAP when you run `ifconfig wlan create wlandev i3e0`
+	ic->ic_vap_delete = i3e_vap_delete;		// Opposite, deletes the VAP when you run `ifconfig wlan0 destroy`
+	ic->ic_set_channel = i3e_set_channel;		// Change the channel
+	ic->ic_raw_xmit = i3e_raw_xmit;
+	ic->ic_transmit = i3e_transmit;			// Ordered packet transfer
+	ic->ic_update_mcast = i3e_update_mcast;
 
 	ieee80211_announce(ic);
 
@@ -557,12 +557,12 @@ static int i3e_event_handler(struct module *module, int event_type, void *arg) {
 
   switch (event_type) {				// event_type is an enum; let's switch on it
     case MOD_LOAD:					// if we're loading
-  	  sc = malloc(sizeof(struct i3e_template_softc), M_80211_VAP, M_WAITOK | M_ZERO);
-	  i3e_template_attach(sc);
+  	  sc = malloc(sizeof(struct i3e_softc), M_80211_VAP, M_WAITOK | M_ZERO);
+	  i3e_attach(sc);
       break;
 
     case MOD_UNLOAD:				// if were unloading
-	  i3e_template_detach(sc);
+	  i3e_detach(sc);
 	  // This free is handled by the FreeBSD's driver, but we have to manually simulate it here
 	  free(sc, M_80211_VAP);
       break;
@@ -577,7 +577,7 @@ static int i3e_event_handler(struct module *module, int event_type, void *arg) {
 }
 
 static moduledata_t i3e_data = {
-  "i3e_template",           // Name of our module
+  "i3e",           // Name of our module
   i3e_event_handler,        // Name of our module's 'event handler' function
   NULL                      // Ignore for now :)
 };

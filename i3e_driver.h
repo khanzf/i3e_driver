@@ -87,7 +87,7 @@
  * BSD drivers store driver instance-specific variables in their "softc"
  * structure.
  */
-struct i3e_template_softc {
+struct i3e_softc {
 	struct ieee80211com		sc_ic;	// Used to store methods of how the base OS interacts with the driver andr how it interacts with VAP
 	struct mtx				sc_mtx; // Device-wide locking mutex 
 
@@ -104,19 +104,19 @@ struct i3e_template_softc {
 	struct mbufq			sc_snd;
 };
 
-static struct i3e_template_softc *sc;
+static struct i3e_softc *sc;
 
 // This structure overrides ieee80211vap, so an instance of it must come first.
-struct i3e_template_vap {
+struct i3e_vap {
 	struct ieee80211vap		vap;
 	int	(*iv_newstate)(struct ieee80211vap *, enum ieee80211_state, int);
 };
 
-#define I3E_TEMPLATE_VAP(vap)		((struct i3e_template_vap *)(vap))
+#define I3E_VAP(vap)		((struct i3e_vap *)(vap))
 
-//#define I3E_TEMPLATE_LOCK_INIT(_sc)	mtx_init(&(sc)->sc_mtx, device_get_nameunit((sc)->sc_dev), MTX_NETWORK_LOCK, MTX_DEF);
-#define I3E_TEMPLATE_LOCK_INIT(_sc)	mtx_init(&(sc)->sc_mtx, "i3e0", MTX_NETWORK_LOCK, MTX_DEF);
-#define I3E_TEMPLATE_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
-#define I3E_TEMPLATE_UNLOCK(_sc)	mtx_unlock(&(_sc)->sc_mtx)
+//#define I3E_LOCK_INIT(_sc)	mtx_init(&(sc)->sc_mtx, device_get_nameunit((sc)->sc_dev), MTX_NETWORK_LOCK, MTX_DEF);
+#define I3E_LOCK_INIT(_sc)	mtx_init(&(sc)->sc_mtx, "i3e0", MTX_NETWORK_LOCK, MTX_DEF);
+#define I3E_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
+#define I3E_UNLOCK(_sc)	mtx_unlock(&(_sc)->sc_mtx)
 
-#define I3E_TEMPLATE_VAP(vap)		((struct i3e_template_vap *)(vap))
+#define I3E_VAP(vap)		((struct i3e_vap *)(vap))
