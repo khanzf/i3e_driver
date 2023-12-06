@@ -125,7 +125,6 @@ i3e_detach(struct i3e_softc *sc)
 static int
 i3e_init(struct i3e_softc *sc)
 {
-	printf("i3e_init\n");
 	sc->sc_running = 1;
 	return (0);
 }
@@ -456,21 +455,24 @@ i3e_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 }
 
 /*
- * Set the device modes that the physical device is capable of doing
+ * Set the modes that the physical device is capable of.
  * The modes are enumerated in ieee80211_phymode (sys/net80211/_ieee80211.h)
  *
  * Simple example: zyd_getradiocaps
  */
 static void
-i3e_getradiocaps(struct ieee80211com *ic, int maxchans, int *nchans, struct ieee80211_channel chans[])
+i3e_getradiocaps(struct ieee80211com *ic, int maxchans, int *nchans,
+	struct ieee80211_channel chans[])
 {
 	uint8_t bands[IEEE80211_MODE_BYTES];
 	memset(bands, 0, sizeof(bands));
 
 	/*
-	 * These are possible options that the device can physically module the signal and its associated frequency
-	 * such as OFDM, CCK, GFSK, and 5GHz and 2GHz.
-	 * The options are located in the enum ieee80211_phymode (sys/net80211/_ieee80211.h)
+	 * These are possible options that the device can physically module the
+	 * signal and its associated frequency such as OFDM, CCK, GFSK, and 5GHz
+	 * and 2GHz.
+	 * The options are located in the enum ieee80211_phymode
+	 * (sys/net80211/_ieee80211.h):
 	 * - IEEE80211_MODE_AUTO
 	 * - IEEE80211_MODE_11A
 	 * - IEEE80211_MODE_11B
