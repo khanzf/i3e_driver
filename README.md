@@ -29,7 +29,17 @@ ifconfig wlan create wlandev i3e0
 ## How to read
 
 Like all drivers, this might come off like a wall of code with no context.
-The order to read this code is:
+I hope this explanation breaks it down into manageable blocks. The code is minimal and heavily documented.
+
+Since there is no PCI or USB bus, I simulated the BUS through `callout`s with detailed explanations of what they are intended to replace.
+
+The driver sub-routines are as follows:
+
+1) The attachment, probe and initiation process
+2) The state change function 
+3) Beacon frame scanning and association
+
+## Atachment, Probe and Initiation
 1) `i3e_attach` - Executed after the device is identified by
 the `probe` function. Note, because this driver is a software-only
 implementation, not a real USB, PCI or SDIO driver. It should power on the device, read any hardcoded values (ie, device version, MAC address, etc) and enable the device accordingly. The end result will be the `i3e0` interface.
@@ -40,6 +50,17 @@ implementation, not a real USB, PCI or SDIO driver. It should power on the devic
     * `i3e_init` - This function turns the device on and starts reading or writing.
 
 ### Explanation
+
+## Scanning Process
+
+When the device is turned on in XXX mode, it begins to scan. The following tasks are done:
+
+1) The `vp_newstate` handler is called with the `nstate` value set to `IEEE211_S_SCAN`. Real device drivers set the physical device to scan mode. This allows them to receive arbitrary beacon frames.
+2) ieee80211 will call the `ic_scan_start`, `ic_set_channel` through all channels, and finally `ic->scan_end`.
+2) At this point, the device should receiving beacon frames from nearby stations. In a real driver, this would happen via:
+    * In USB, the Rx bulk callback handler
+    * In PCI, a PCI interrupt with the read flag set
+Both implementations would read the raw frame, perform any modifications as needed, and send the frame to the ieee80211 layer via `ieee80211_input`.
 
 ## Source Files
 
