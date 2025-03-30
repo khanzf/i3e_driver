@@ -61,7 +61,7 @@ When the device is turned on in XXX mode, it begins to scan. The following tasks
     * In USB, the Rx bulk callback handler
     * In PCI, a PCI interrupt with the read flag set
 
-Both implementations would read the raw frame, perform any modifications as needed, and send the frame to the ieee80211 layer via `ieee80211_input`.
+   Both implementations would read the raw frame, perform any modifications as needed, and send the frame to the ieee80211 layer via `ieee80211_input`.
 
 ## Source Files
 
