@@ -226,7 +226,6 @@ i3e_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
 	struct i3e_softc *sc = ic->ic_softc;
 	int ret = 0;
 
-
 	/* this prevents management frames from being sent if we are not ready */
 	I3E_LOCK(sc);
 	if (!(sc->sc_running)) {
@@ -494,6 +493,11 @@ i3e_getradiocaps(struct ieee80211com *ic, int maxchans, int *nchans,
 	ieee80211_add_channels_default_2ghz(chans, maxchans, nchans, bands, 0);
 }
 
+static int i3e_wme_update(struct ieee80211com *ic)
+{
+	return (0);
+}
+
 static int i3e_attach(struct i3e_softc *sc)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
@@ -547,6 +551,7 @@ static int i3e_attach(struct i3e_softc *sc)
 	ic->ic_raw_xmit = i3e_raw_xmit;
 	ic->ic_transmit = i3e_transmit;			// Ordered packet transfer
 	ic->ic_update_mcast = i3e_update_mcast;
+	ic->ic_wme.wme_update = i3e_wme_update;
 
 	ieee80211_announce(ic);
 
