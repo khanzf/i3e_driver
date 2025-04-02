@@ -1,7 +1,7 @@
 /*-
  * SPDX-License-Identifier: BSD-2-Clause
  *
- * Copyright (c) 2023 Farhan Khan <farhan@farhan.codes>
+ * Copyright (c) 2025 Farhan Khan <farhan@farhan.codes>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -34,12 +34,13 @@
  * be responsible for the match, power on/off, state management, etc. Instead, this code
  * implements everything in software.
  *
- */ 
-
-#ifndef __I3E_DRIVER_H__
-#define __I3E_DRIVER_H__
+ */
 
 #include <sys/cdefs.h>
+__FBSDID("$FreeBSD$");
+
+// This file is generated during the build of the driver
+#include "opt_global.h"
 
 #include <sys/param.h>
 #include <sys/sockio.h>
@@ -54,7 +55,6 @@
 #include <sys/module.h>
 #include <sys/endian.h>
 #include <sys/kdb.h>
-#include <sys/types.h>
 
 #include <net/bpf.h>
 #include <net/if.h>
@@ -70,6 +70,14 @@
 #include <net80211/ieee80211_radiotap.h>
 #include <net80211/ieee80211_ratectl.h>
 
+#include <sys/param.h>
+#include <sys/module.h>
+#include <sys/kernel.h>
+#include <sys/systm.h>
+
+#include <sys/types.h>
+#include <sys/malloc.h>
+
 #include <net/bpf.h>
 #include <net/if.h>
 #include <net/if_var.h>
@@ -79,52 +87,12 @@
 #include <net/if_media.h>
 #include <net/if_types.h>
 
+#include "i3e_driver.h"
 #include "i3e_bus.h"
 
-/*
- * Bus simulation:
- * This driver does not use PCI, USB or SDIO
- * Therefore, this struct is used to simulate hardware interrupts
- */
-
-/*
- * BSD drivers store driver instance-specific variables in their "softc"
- * structure.
- */
-struct i3e_softc {
-	struct ieee80211com		sc_ic;	// Used to store methods of how the base OS interacts with the driver andr how it interacts with VAP
-	struct mtx			sc_mtx; // Device-wide locking mutex 
-
-	int				sc_detached;
-	int				sc_running;
-
-	/*
-	 * mbufq and its associated functions are not clearly defined anywhere. It is an implementation of
-	 * `struct mbuf`. It is a method of queueing frames to be sent in memory prior to sending it.
-	 * The purpose of this is performance, specifically when software operates faster than the hardware
-	 * can push hardware in the data out.
-	 * Its associated functions are located in sys/sys/mbuf.h.
-	 */
-	struct mbufq			sc_snd;
-
-	struct i3e_bus			bus;
-};
-
-static struct i3e_softc *sc;
-
-// This structure overrides ieee80211vap, so an instance of it must come first.
-struct i3e_vap {
-	struct ieee80211vap		vap;
-	int	(*iv_newstate)(struct ieee80211vap *, enum ieee80211_state, int);
-};
-
-#define I3E_VAP(vap)		((struct i3e_vap *)(vap))
-
-//#define I3E_LOCK_INIT(_sc)	mtx_init(&(sc)->sc_mtx, device_get_nameunit((sc)->sc_dev), MTX_NETWORK_LOCK, MTX_DEF);
-#define I3E_LOCK_INIT(_sc)	mtx_init(&(sc)->sc_mtx, "i3e0", MTX_NETWORK_LOCK, MTX_DEF);
-#define I3E_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
-#define I3E_UNLOCK(_sc)	mtx_unlock(&(_sc)->sc_mtx)
-
-#define I3E_VAP(vap)		((struct i3e_vap *)(vap))
-
-#endif // __I3E_DRIVER_H__
+void
+i3e_bus_interrupt(void *arg)
+{
+	struct i3e_bus_interrupt_data *data = (struct i3e_bus_interrupt_data *)data;
+	printf("Received an interrupt...\n");
+}

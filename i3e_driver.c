@@ -43,6 +43,7 @@ __FBSDID("$FreeBSD$");
 #include "opt_global.h"
 
 #include <sys/param.h>
+#include <sys/types.h>
 #include <sys/sockio.h>
 #include <sys/sysctl.h>
 #include <sys/lock.h>
@@ -55,6 +56,8 @@ __FBSDID("$FreeBSD$");
 #include <sys/module.h>
 #include <sys/endian.h>
 #include <sys/kdb.h>
+#include <sys/queue.h>
+#include <sys/taskqueue.h>
 
 #include <net/bpf.h>
 #include <net/if.h>
@@ -69,14 +72,6 @@ __FBSDID("$FreeBSD$");
 #include <net80211/ieee80211_regdomain.h>
 #include <net80211/ieee80211_radiotap.h>
 #include <net80211/ieee80211_ratectl.h>
-
-#include <sys/param.h>
-#include <sys/module.h>
-#include <sys/kernel.h>
-#include <sys/systm.h>
-
-#include <sys/types.h>
-#include <sys/malloc.h>
 
 #include <net/bpf.h>
 #include <net/if.h>
@@ -118,6 +113,8 @@ i3e_detach(struct i3e_softc *sc)
 	ieee80211_ifdetach(&sc->sc_ic);
 	mbufq_drain(&sc->sc_snd);
 	mtx_destroy(&sc->sc_mtx);
+
+	callout_drain(&sc->bus.callout_rx);
 
 	return (0);
 }
@@ -290,7 +287,10 @@ i3e_scan_start(struct ieee80211com *ic)
 	struct i3e_softc *sc = ic->ic_softc;
 
 	I3E_LOCK(sc);
-	// Typically here we would send a command to the device to Start the device into scan-mode
+	/*
+	 * Typically here we would send a command to the
+	 * device to start the device into scan-mode
+	 */
 	printf("%s: Scan Start\n", sc->sc_ic.ic_name);
 	I3E_UNLOCK(sc);
 }
@@ -487,7 +487,6 @@ i3e_getradiocaps(struct ieee80211com *ic, int maxchans, int *nchans,
 	 * - IEEE80211_MODE_VHT_2GHZ
 	 * - IEEE80211_MODE_VHT_5GHZ
 	 */
-
 	setbit(bands, IEEE80211_MODE_11B);
 	setbit(bands, IEEE80211_MODE_11B);
 	setbit(bands, IEEE80211_MODE_11G);
@@ -500,6 +499,15 @@ static int i3e_attach(struct i3e_softc *sc)
 
 	I3E_LOCK_INIT(sc);				// Initialize the Mutex lock
 
+	/*
+	 * This mock driver is not PCI, USB or SDIO
+	 * Therefore, we need to simulate interrupts specifically Rx.
+	 * The 'callout' is used by handlers, such as simulate
+	 * receiving frames from the air.
+	 */
+	callout_init(&sc->bus.callout_rx);
+
+	// XXX Revisit and document this
 	mbufq_init(&sc->sc_snd, ifqmaxlen);
 
 	ic->ic_softc = sc;
