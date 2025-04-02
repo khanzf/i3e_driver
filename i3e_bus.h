@@ -85,17 +85,16 @@
 #include <net/if_media.h>
 #include <net/if_types.h>
 
-#include "i3e_driver.h"
 
-struct i3e_softc;
+struct i3e_bus {
+	struct callout		callout_rx;
+};
+
+#include "i3e_driver.h"
 
 struct i3e_bus_interrupt_data {
 	struct i3e_softc	sc;
 	uint8_t			intr_type;
-};
-
-struct i3e_bus {
-	struct callout		callout_rx;
 };
 
 void i3e_bus_rx_interrupt(void *arg);

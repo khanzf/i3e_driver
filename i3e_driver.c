@@ -82,6 +82,7 @@ __FBSDID("$FreeBSD$");
 #include <net/if_media.h>
 #include <net/if_types.h>
 
+#include "i3e_bus.h"
 #include "i3e_driver.h"
 
 // This function triggers whenever you run ifconfig wlan0 destroy
@@ -505,7 +506,7 @@ static int i3e_attach(struct i3e_softc *sc)
 	 * The 'callout' is used by handlers, such as simulate
 	 * receiving frames from the air.
 	 */
-	callout_init(&sc->bus.callout_rx);
+	callout_init(&sc->bus.callout_rx, 1);
 
 	// XXX Revisit and document this
 	mbufq_init(&sc->sc_snd, ifqmaxlen);
