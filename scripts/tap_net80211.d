@@ -4,6 +4,17 @@
  * Run with sudo ./net80211_tap.d
  */
 
+inline int IEEE80211_ADDR_LEN = 6;
+
+struct ieee80211_frame {
+	uint8_t		i_fc[2];
+	uint8_t		i_dur[2];
+	uint8_t		i_addr1[IEEE80211_ADDR_LEN];
+	uint8_t		i_addr2[IEEE80211_ADDR_LEN];
+	uint8_t		i_addr3[IEEE80211_ADDR_LEN];
+	uint8_t		i_seq[2];
+} __packed;
+
 struct ieee80211_channel {
 	uint32_t	ic_flags;	/* see below */
 	uint16_t	ic_freq;	/* primary centre frequency in MHz */
