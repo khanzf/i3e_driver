@@ -1,5 +1,5 @@
-KMOD=	i3e_driver
-SRCS=	i3e_driver.c i3e_driver.h
+KMOD=	i3e
+SRCS=	if_i3e.c if_i3e.h
 
 DCOPTFLAGS+=	-g -O0	
 

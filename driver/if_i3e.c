@@ -87,7 +87,7 @@ __FBSDID("$FreeBSD$");
 #include <net/if_media.h>
 #include <net/if_types.h>
 
-#include "i3e_driver.h"
+#include "if_i3e.h"
 
 // This function triggers whenever you run ifconfig wlan0 destroy
 static void
