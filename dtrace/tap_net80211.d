@@ -32,13 +32,39 @@ struct ieee80211_channel {
 	uint16_t	ic_freq2;	/* VHT secondary 80MHz freq2 MHz */
 };
 
-struct ieee80211_channel *c;
-
+/*
 fbt::ieee80211_process_mimo:return {
 }
 
 fbt::ieee80211_input_all:entry {
 }
+*/
 
-fbt::ieee80211_input_all:return {
+/*
+fbt:kernel:sta_recv_mgmt:entry {
+	self->ni	= arg0;
+	self->m0	= arg1;
+	self->subtype	= arg2;
+	self->rxs	= arg3;
+	self->rssi	= arg4;
+	self->nf	= arg5;
+
+	self->vap	= arg0->ni;
+
+	printf("vap %d\n", arg0->ni_vap);
+}
+*/
+
+fbt::sta_recv_mgmt:entry
+{
+    /* arg0 is the first argument, a pointer to ieee80211_node */
+    this->node = (struct ieee80211_node *)arg0;
+
+    /* Print some fields of the ieee80211_node structure */
+    printf("Node address: %s\n", stringof(this->node->ni_macaddr));
+    printf("RSSI: %d\n", this->node->ni_rssi);
+    printf("State: %d\n", this->node->ni_state);
+}
+
+fbt:kernel:sta_recv_mgmt:return {
 }
