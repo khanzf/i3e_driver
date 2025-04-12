@@ -129,6 +129,7 @@ i3e_detach(struct i3e_softc *sc)
  * is labeled as not running.
  * Other drivers capture this as a flag, either works.
  */
+int
 i3e_init(struct i3e_softc *sc)
 {
 	/* This labels the device as running */
@@ -387,8 +388,11 @@ i3e_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	IEEE80211_UNLOCK(ic);
 	I3E_LOCK(sc);
 
-	// Here, we may choose to handle the previous state
-	// The new state, potential values are listed in sys/net80211/ieee80211_proto.h
+	/*
+	 * Here, we may choose to handle the previous state
+	 * The new state, potential values are listed in
+	 * sys/net80211/ieee80211_proto.h
+	 */
 	ostate = vap->iv_state;
 
 	switch(ostate) {
@@ -454,6 +458,7 @@ i3e_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 	struct ieee80211vap *vap;
 	struct i3e_vap *ivp;
 
+	/* Wifi modes are listed in sys/net80211/_ieee80211.h */
 	switch(opmode) {
 	case IEEE80211_M_IBSS:
 		printf("opmode = IEEE80211_M_IBSS, Adhoc mode\n");
