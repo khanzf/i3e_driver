@@ -129,7 +129,7 @@ i3e_detach(struct i3e_softc *sc)
  * is labeled as not running.
  * Other drivers capture this as a flag, either works.
  */
-int
+static int
 i3e_init(struct i3e_softc *sc)
 {
 	/* This labels the device as running */
