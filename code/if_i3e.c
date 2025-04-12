@@ -122,9 +122,16 @@ i3e_detach(struct i3e_softc *sc)
 	return (0);
 }
 
-static int
+/*
+ * The *_init function power on the device and do whatever
+ * initial configurations are necessary to atomize Tx and Rx.
+ * This function is often called by *_parent when the device
+ * is labeled as not running.
+ * Other drivers capture this as a flag, either works.
+ */
 i3e_init(struct i3e_softc *sc)
 {
+	/* This labels the device as running */
 	sc->sc_running = 1;
 	return (0);
 }
@@ -132,6 +139,7 @@ i3e_init(struct i3e_softc *sc)
 static void
 i3e_stop(struct i3e_softc *sc)
 {
+	sc->sc_running = 0;
 	printf("i3e_stop\n");
 }
 
@@ -254,7 +262,9 @@ i3e_update_mcast(struct ieee80211com *ic)
 /*
  * This function is triggered when the device is brought up or down
  * For example, `ifconfig wlan0 up` or `ifconfig wlan0 down`
- * The basic structure below is replicated in most drivers
+ * The basic structure below is replicated in most drivers. If the
+ * device is not running, as determined by the number of vaps,
+ * then the common idiom is to call the *_init function.
  */
 static void
 i3e_parent(struct ieee80211com *ic)
