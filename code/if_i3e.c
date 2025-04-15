@@ -137,6 +137,9 @@ i3e_init(struct i3e_softc *sc)
 	return (0);
 }
 
+/*
+ * Power off the device, drain all queued mbufs
+ */
 static void
 i3e_stop(struct i3e_softc *sc)
 {
@@ -145,7 +148,10 @@ i3e_stop(struct i3e_softc *sc)
 }
 
 /*
- * This is the handler for when a user runs ifconfig wlanX channel [CHAN NUMBER]
+ * This is the handler for when the channel is
+ * changed, such as during a scan or manually
+ * when a user runs:
+ *  ifconfig wlanX channel [CHAN NUMBER]
  * Your handler code communicates with the device to change the device channel
  * Very basic example handler: wi_set_channel
  * Helper function ieee80211_chan2ieee, converts channel to IEEE channel number
@@ -156,7 +162,6 @@ i3e_set_channel(struct ieee80211com *ic)
 	struct i3e_softc *sc = ic->ic_softc;
 
 	I3E_LOCK(sc);
-	printf("i3e_set_channel to %d\n", ieee80211_chan2ieee(ic, ic->ic_curchan));
 	I3E_UNLOCK(sc);
 }
 
@@ -235,7 +240,7 @@ i3e_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
 	struct i3e_softc *sc = ic->ic_softc;
 	int ret = 0;
 
-	/* this prevents management frames from being sent if we are not ready */
+	/* this prevents rames from being sent if we are not ready */
 	I3E_LOCK(sc);
 	if (!(sc->sc_running)) {
 		ret = ENETDOWN;
@@ -329,7 +334,6 @@ custom_beacon(struct ieee80211com *ic)
 	m->m_pkthdr.len = m->m_len = frame_len;
 
 	ieee80211_input_all(ic, m, 50, -95);
-	printf("Custom beacon inserted!\n");
 }
 
 /*
@@ -344,7 +348,6 @@ i3e_scan_start(struct ieee80211com *ic)
 	I3E_LOCK(sc);
 	// Typically here we would send a command to the device to Start the device into scan-mode
 	custom_beacon(ic);
-	printf("%s: Scan Start\n", sc->sc_ic.ic_name);
 	I3E_UNLOCK(sc);
 }
 
@@ -358,7 +361,6 @@ i3e_scan_end(struct ieee80211com *ic)
 
 	I3E_LOCK(sc);
 	// Typically here we would send a command to the device to stop the device into scan-mode
-	printf("%s: Scan End\n", sc->sc_ic.ic_name);
 	I3E_UNLOCK(sc);
 }
 
@@ -570,19 +572,18 @@ static int i3e_attach(struct i3e_softc *sc)
 	ic->ic_phytype = IEEE80211_T_FH;		// Physical type, enum defined in sys/net/80211/_ieee80211.h
 
 	ic->ic_caps =
-	      IEEE80211_C_STA		/* station mode supported */
-	    | IEEE80211_C_IBSS		/* IBSS mode supported */
-	    | IEEE80211_C_MONITOR	/* monitor mode supported */
-	    | IEEE80211_C_HOSTAP	/* HostAp mode supported */
-	    | IEEE80211_C_AHDEMO	/* adhoc demo mode */
-	    | IEEE80211_C_TXPMGT	/* tx power management */
-	    | IEEE80211_C_SHPREAMBLE	/* short preamble supported */
-	    | IEEE80211_C_SHSLOT	/* short slot time supported */
-	    | IEEE80211_C_BGSCAN	/* bg scanning supported */
-	    | IEEE80211_C_WPA		/* 802.11i */
-	    | IEEE80211_C_WME		/* 802.11e */
-	    | IEEE80211_C_PMGT		/* Station-side power mgmt */
-	    ;
+	    IEEE80211_C_STA |		/* station mode supported */
+	    IEEE80211_C_IBSS |		/* IBSS mode supported */
+	    IEEE80211_C_MONITOR |	/* monitor mode supported */
+	    IEEE80211_C_HOSTAP |	/* HostAp mode supported */
+	    IEEE80211_C_AHDEMO |	/* adhoc demo mode */
+	    IEEE80211_C_TXPMGT |	/* tx power management */
+	    IEEE80211_C_SHPREAMBLE |	/* short preamble supported */
+	    IEEE80211_C_SHSLOT |	/* short slot time supported */
+	    IEEE80211_C_BGSCAN |	/* bg scanning supported */
+	    IEEE80211_C_WPA |		/* 802.11i */
+	    IEEE80211_C_WME |		/* 802.11e */
+	    IEEE80211_C_PMGT;	/* Station-side power mgmt */
 
 	ic->ic_cryptocaps =
 	    IEEE80211_CRYPTO_WEP |
@@ -607,7 +608,7 @@ static int i3e_attach(struct i3e_softc *sc)
 	ic->ic_vap_delete = i3e_vap_delete;		// Opposite, deletes the VAP when you run `ifconfig wlan0 destroy`
 	ic->ic_set_channel = i3e_set_channel;		// Change the channel
 	ic->ic_raw_xmit = i3e_raw_xmit;
-	ic->ic_transmit = i3e_transmit;			// Ordered packet transfer
+	ic->ic_transmit = i3e_transmit;			// Buffered frame queueing transfer
 	ic->ic_update_mcast = i3e_update_mcast;
 	ic->ic_wme.wme_update = i3e_wme_update;
 
