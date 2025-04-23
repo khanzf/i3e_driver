@@ -115,9 +115,9 @@ i3e_detach(struct i3e_softc *sc)
 	sc->sc_detached = 1;
 	I3E_UNLOCK(sc);
 
-	ieee80211_ifdetach(&sc->sc_ic);
 	mbufq_drain(&sc->sc_snd);
 	mtx_destroy(&sc->sc_mtx);
+	ieee80211_ifdetach(&sc->sc_ic);
 
 	return (0);
 }
@@ -385,7 +385,6 @@ i3e_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	struct i3e_softc *sc = ic->ic_softc;
 	enum ieee80211_state ostate;
 
-	printf("%s: newstate\n", sc->sc_ic.ic_name);
 	// I am not clear on the locking mechanism below, see here: https://lists.freebsd.org/archives/freebsd-wireless/2023-November/001627.html
 	IEEE80211_UNLOCK(ic);
 	I3E_LOCK(sc);
