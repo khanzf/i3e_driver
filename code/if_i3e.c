@@ -557,6 +557,25 @@ static int i3e_wme_update(struct ieee80211com *ic)
 	return (0);
 }
 
+/*
+ * The ieee80211_node stores information about other devices (nodes) that the device
+ * is aware of.
+ * As with other structures, net80211 allows you to extend the node for
+ * device-specific considerations if necessary. This function simply allocates the memory
+ * and initializes it as needed
+ */
+static struct ieee80211_node *
+i3e_node_alloc(struct ieee80211vap *vap, const uint8_t mac[IEEE80211_ADDR_LEN])
+{
+	struct i3e_node *in;
+
+	in = malloc(sizeof(struct i3e_node), M_80211_NODE, M_NOWAIT | M_ZERO);
+	if (in == NULL) {
+		printf("i3e: Unable to allocate node\n");
+	}
+	return (struct ieee80211_node *)in;
+}
+
 static int i3e_attach(struct i3e_softc *sc)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
@@ -608,6 +627,7 @@ static int i3e_attach(struct i3e_softc *sc)
 	ic->ic_set_channel = i3e_set_channel;		// Change the channel
 	ic->ic_raw_xmit = i3e_raw_xmit;
 	ic->ic_transmit = i3e_transmit;			// Buffered frame queueing transfer
+	ic->ic_node_alloc = i3e_node_alloc;		// Allocates node information specific to device. Not all devices need this, but may be necessary
 	ic->ic_update_mcast = i3e_update_mcast;
 	ic->ic_wme.wme_update = i3e_wme_update;
 

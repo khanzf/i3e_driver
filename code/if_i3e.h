@@ -88,7 +88,7 @@
  * structure.
  */
 struct i3e_softc {
-	struct ieee80211com		sc_ic;	// Used to store methods of how the base OS interacts with the driver andr how it interacts with VAP
+	struct ieee80211com		sc_ic;	// This must be the first element, used to store methods of how the base OS interacts with the driver andr how it interacts with VAP
 	struct mtx				sc_mtx; // Device-wide locking mutex 
 
 	int						sc_detached;
@@ -114,7 +114,11 @@ struct i3e_vap {
 
 #define I3E_VAP(vap)		((struct i3e_vap *)(vap))
 
-//#define I3E_LOCK_INIT(_sc)	mtx_init(&(sc)->sc_mtx, device_get_nameunit((sc)->sc_dev), MTX_NETWORK_LOCK, MTX_DEF);
+struct i3e_node {
+	struct ieee80211_node	ni; // This must be the first element
+	/* You can put anything necessary here */
+};
+
 #define I3E_LOCK_INIT(_sc)	mtx_init(&(sc)->sc_mtx, "i3e0", MTX_NETWORK_LOCK, MTX_DEF);
 #define I3E_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
 #define I3E_UNLOCK(_sc)	mtx_unlock(&(_sc)->sc_mtx)
