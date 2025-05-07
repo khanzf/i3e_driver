@@ -400,18 +400,25 @@ i3e_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	case IEEE80211_S_INIT:
 		break;
 	case IEEE80211_S_SCAN:
+		/* Happens when scanning */
 		break;
 	case IEEE80211_S_AUTH:
+		/* When the device is authenticating to a station */
 		break;
 	case IEEE80211_S_ASSOC:
+		/* Post Authentication, Associating */
 		break;
 	case IEEE80211_S_CAC:
+		/* Channel Availability Check */
 		break;
 	case IEEE80211_S_RUN:
+		/* Regular usage, post association */
 		break;
 	case IEEE80211_S_CSA:
+		/* Channel Switch Announce pending */
 		break;
 	case IEEE80211_S_SLEEP:
+		/* Power Save Mode */
 		break;
 	default:
 		break;
