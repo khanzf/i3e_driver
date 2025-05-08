@@ -122,6 +122,14 @@ struct i3e_node {
 	/* You can put anything necessary here */
 };
 
+/*
+ * Forward declaring structure, which holds the read/write/ioctl
+ * handlers This variable is defined at the end of this file.
+ * Forward declaration would not be necessary if I put all
+ * function prototypes above.
+ */
+static struct cdevsw i3e_cdevsw;
+
 #define I3E_LOCK_INIT(_sc)	mtx_init(&(sc)->sc_mtx, "i3e0", MTX_NETWORK_LOCK, MTX_DEF);
 #define I3E_LOCK(_sc)		mtx_lock(&(_sc)->sc_mtx)
 #define I3E_UNLOCK(_sc)	mtx_unlock(&(_sc)->sc_mtx)

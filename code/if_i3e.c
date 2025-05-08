@@ -55,6 +55,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/module.h>
 #include <sys/endian.h>
 #include <sys/kdb.h>
+#include <sys/uio.h>
 
 #include <net/bpf.h>
 #include <net/if.h>
@@ -88,14 +89,6 @@ __FBSDID("$FreeBSD$");
 #include <net/if_types.h>
 
 #include "if_i3e.h"
-
-/*
- * Forward declaring structure, which holds the read/write/ioctl
- * handlers This variable is defined at the end of this file.
- * Forward declaration would not be necessary if I put all
- * function prototypes above.
- */
-static struct cdevsw i3e_cdevsw;
 
 // This function triggers whenever you run ifconfig wlan0 destroy
 static void
@@ -306,47 +299,6 @@ i3e_parent(struct ieee80211com *ic)
 		i3e_stop(sc);
 }
 
-static void
-custom_beacon(struct ieee80211com *ic)
-{
-	struct mbuf *m = NULL;
-	int frame_len;
-
-	uint8_t myframe[] =
-		"\x80\x00\x00\x00\xFF\xFF\xFF\xFF\xFF\xFF\x00\x11\x22\x33\x44\x55"
-		"\x00\x11\x22\x33\x44\x55\x10\x27\x8A\xD1\x3C\x19\x02\x00\x00\x00"
-		"\x64\x00\x11\x14\x00\x06"
-		"\x4e\x41\x46\x49\x53\x41"
-		"\x01\x08"
-		"\x82\x84\x8B\x96\x24\x30\x48\x6C\x03\x01\x0B\x05\x04\x00\x01\x00"
-		"\x00\x2A\x01\x04\x32\x04\x0C\x12\x18\x60\x30\x14\x01\x00\x00\x0F"
-		"\xAC\x04\x01\x00\x00\x0F\xAC\x04\x01\x00\x00\x0F\xAC\x02\x0C\x00"
-		"\x0B\x05\x0E\x00\x32\x00\x00\x46\x05\x72\x08\x01\x00\x00\x2D\x1A"
-		"\xBD\x09\x1B\xFF\xFF\xFF\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x3D\x16\x0B\x08\x04\x00"
-		"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-		"\x00\x00\x7F\x08\x04\x00\x08\x00\x00\x00\x00\x40\xDD\x18\x00\x50"
-		"\xF2\x04\x10\x4A\x00\x01\x10\x10\x44\x00\x01\x02\x10\x49\x00\x06"
-		"\x00\x37\x2A\x00\x01\x20\xDD\x09\x00\x10\x18\x02\x0E\x00\x1C\x00"
-		"\x00\xDD\x18\x00\x50\xF2\x02\x01\x01\x80\x00\x03\xA4\x00\x00\x27"
-		"\xA4\x00\x00\x42\x43\x5E\x00\x62\x32\x2F\x00";
-
-	frame_len = 233;
-
-
-	m = m_get2(frame_len, M_NOWAIT, MT_DATA, M_PKTHDR);
-	if (m == NULL) {
-		printf("Failed to m_get2.\n");
-	}
-
-	memcpy(mtod(m, uint8_t *), myframe, frame_len);
-	
-	// Copied from if_rum.c
-	m->m_pkthdr.len = m->m_len = frame_len;
-
-	ieee80211_input_all(ic, m, 50, -95);
-}
-
 /*
  * As the name suggests, this function should set the card into scan-mode
  * which will seek out stations and listen to for endpoints
@@ -358,7 +310,6 @@ i3e_scan_start(struct ieee80211com *ic)
 
 	I3E_LOCK(sc);
 	// Typically here we would send a command to the device to Start the device into scan-mode
-	custom_beacon(ic);
 	I3E_UNLOCK(sc);
 }
 
@@ -693,20 +644,38 @@ i3e_event_handler(struct module *module, int event_type, void *arg)
 static int
 i3e_write(struct cdev *dev, struct uio *uio, int ioflag)
 {
-//	uint8_t *frame;
+	struct i3e_softc *sc = dev->si_drv1;
+	struct ieee80211com *ic = &sc->sc_ic;
 	int error = 0;
+	struct mbuf *m = NULL;
+	ssize_t framelen;
 
-/*
-	frame = malloc(uio->uio_resid + 1, M_DEVBUF, M_WAITOK);
-	error = uiomove(frame, uio->uio_resid, uio);
+	framelen = uio->uio_resid;
 
-	if (error)
+	printf("Size of data: %zd\n", framelen);
+
+	m = m_get2(framelen, M_NOWAIT, MT_DATA, M_PKTHDR);
+	if (m == NULL) {
+		printf("Failed to allocate kernel memory\n");
+		return ENOMEM;
+	}
+
+	error = uiomove(mtod(m, uint8_t *), framelen, uio);
+	if (error) {
+		printf("Failed to move data from userspace to kernel\n");
 		goto error;
+	}
+	m->m_pkthdr.len = m->m_len = framelen;
 
-	printf("Got the data: %s\n", s);
-*/
-//error:
-//	free(frame, M_BUFDEV);
+	/*
+	 * I do not understand RSSI and noise just yet so
+	 * the figures 50 and -95 are dummy figure
+	 */
+	ieee80211_input_all(ic, m, 50, -95);
+
+	printf("Writing %zd bytes to ieee80211_input_all\n", framelen);
+
+error:
 	return (error);
 }
 
