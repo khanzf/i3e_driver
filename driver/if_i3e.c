@@ -99,7 +99,7 @@ i3e_vap_delete(struct ieee80211vap *vap)
 	ieee80211_vap_detach(vap);	// Minimum needed to delete the VAP
 	if (ivp->cdev)
 		destroy_dev(ivp->cdev);
-	printf("Destroying /dev/i3e_vap%d", vap->iv_ifp->if_dunit);
+	printf("Destroying /dev/i3e_vap%d\n", vap->iv_ifp->if_dunit);
 	free(ivp, M_80211_VAP);
 }
 
@@ -121,8 +121,8 @@ i3e_detach(struct i3e_softc *sc)
 	I3E_UNLOCK(sc);
 
 	mbufq_drain(&sc->sc_snd);
-	mtx_destroy(&sc->sc_mtx);
 	ieee80211_ifdetach(&sc->sc_ic);
+	mtx_destroy(&sc->sc_mtx);
 
 	return (0);
 }
@@ -486,7 +486,7 @@ i3e_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 	ivp->cdev = make_dev(&i3e_cdevsw, 0, UID_ROOT,
 		GID_OPERATOR, 0600, "i3e_vap%d", vap->iv_ifp->if_dunit);
 	ivp->cdev->si_drv1 = sc;
-	printf("Creating /dev/i3e_vap%d", vap->iv_ifp->if_dunit);
+	printf("Creating /dev/i3e_vap%d\n", vap->iv_ifp->if_dunit);
 
 	return (vap);
 }
