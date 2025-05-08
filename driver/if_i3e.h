@@ -103,15 +103,14 @@ struct i3e_softc {
 	 * Its associated functions are located in sys/sys/mbuf.h.
 	 */
 	struct mbufq			sc_snd;
-
-	struct cdev				*dev;
 };
 
 static struct i3e_softc *sc;
 
 // This structure overrides ieee80211vap, so an instance of it must come first.
 struct i3e_vap {
-	struct ieee80211vap		vap;
+	struct ieee80211vap		vap;	// This must be the first member
+	struct cdev			*cdev; // Used to store character device handlers
 	int	(*iv_newstate)(struct ieee80211vap *, enum ieee80211_state, int);
 };
 

@@ -87,6 +87,7 @@ __FBSDID("$FreeBSD$");
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_types.h>
+#include <net/if_private.h>
 
 #include "if_i3e.h"
 
@@ -96,6 +97,8 @@ i3e_vap_delete(struct ieee80211vap *vap)
 {
 	struct i3e_vap	*ivp = I3E_VAP(vap);
 	ieee80211_vap_detach(vap);	// Minimum needed to delete the VAP
+	if (ivp->cdev)
+		destroy_dev(ivp->cdev);
 	free(ivp, M_80211_VAP);
 }
 
@@ -115,9 +118,6 @@ i3e_detach(struct i3e_softc *sc)
 	I3E_LOCK(sc);
 	sc->sc_detached = 1;
 	I3E_UNLOCK(sc);
-
-	if (sc->dev)
-		destroy_dev(sc->dev);
 
 	mbufq_drain(&sc->sc_snd);
 	mtx_destroy(&sc->sc_mtx);
@@ -481,6 +481,12 @@ i3e_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
 		ieee80211_media_status, mac);
 	ic->ic_opmode = opmode;
 
+	// Make the per-VAP character device
+	ivp->cdev = make_dev(&i3e_cdevsw, 0, UID_ROOT,
+		GID_OPERATOR, 0600, "i3e%d_vap%d", ic->ic_ifp->if_dunit, vap->iv_ifp->if_dunit);
+	ivp->cdev->si_drv1 = sc;
+
+
 	return (vap);
 }
 
@@ -604,10 +610,6 @@ i3e_attach(struct i3e_softc *sc)
 	ic->ic_node_alloc = i3e_node_alloc;		// Allocates node information specific to device. Not all devices need this, but may be necessary
 	ic->ic_update_mcast = i3e_update_mcast;
 	ic->ic_wme.wme_update = i3e_wme_update;
-
-	sc->dev = make_dev(&i3e_cdevsw, 0, UID_ROOT,
-		GID_OPERATOR, 0600, "i3e%d", 0);
-	sc->dev->si_drv1 = sc;
 
 	// This announces the interface in the kernel messages
 	ieee80211_announce(ic);
