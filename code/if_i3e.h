@@ -50,6 +50,7 @@
 #include <sys/malloc.h>
 #include <sys/module.h>
 #include <sys/endian.h>
+#include <sys/conf.h>
 #include <sys/kdb.h>
 
 #include <net/bpf.h>
@@ -102,6 +103,8 @@ struct i3e_softc {
 	 * Its associated functions are located in sys/sys/mbuf.h.
 	 */
 	struct mbufq			sc_snd;
+
+	struct cdev				*dev;
 };
 
 static struct i3e_softc *sc;
@@ -124,3 +127,30 @@ struct i3e_node {
 #define I3E_UNLOCK(_sc)	mtx_unlock(&(_sc)->sc_mtx)
 
 #define I3E_VAP(vap)		((struct i3e_vap *)(vap))
+
+static void i3e_vap_delete(struct ieee80211vap *vap);
+static int i3e_detach(struct i3e_softc *sc);
+static int i3e_init(struct i3e_softc *sc);
+static void i3e_stop(struct i3e_softc *sc);
+static void i3e_set_channel(struct ieee80211com *ic);
+static void i3e_start(struct i3e_softc *sc);
+static int i3e_transmit(struct ieee80211com *ic, struct mbuf *m);
+static int i3e_raw_xmit(struct ieee80211_node *ni, struct mbuf *m,
+    const struct ieee80211_bpf_params *params);
+static void i3e_update_mcast(struct ieee80211com *ic);
+static void i3e_parent(struct ieee80211com *ic);
+static void i3e_scan_start(struct ieee80211com *ic);
+static void i3e_scan_end(struct ieee80211com *ic);
+static int i3e_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate,
+    int arg);
+static struct ieee80211vap *i3e_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ],
+    int unit, enum ieee80211_opmode opmode, int flags, const uint8_t bssid[IEEE80211_ADDR_LEN],
+	const uint8_t mac[IEEE80211_ADDR_LEN]);
+static void i3e_getradiocaps(struct ieee80211com *ic, int maxchans, int *nchans,
+    struct ieee80211_channel chans[]);
+static int i3e_wme_update(struct ieee80211com *ic);
+static struct ieee80211_node *i3e_node_alloc(struct ieee80211vap *vap,
+    const uint8_t mac[IEEE80211_ADDR_LEN]);
+static int i3e_attach(struct i3e_softc *sc);
+static int i3e_event_handler(struct module *module, int event_type, void *arg);
+static int i3e_write(struct cdev *dev, struct uio *uio, int ioflag);

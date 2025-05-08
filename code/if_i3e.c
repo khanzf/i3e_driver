@@ -89,6 +89,14 @@ __FBSDID("$FreeBSD$");
 
 #include "if_i3e.h"
 
+/*
+ * Forward declaring structure, which holds the read/write/ioctl
+ * handlers This variable is defined at the end of this file.
+ * Forward declaration would not be necessary if I put all
+ * function prototypes above.
+ */
+static struct cdevsw i3e_cdevsw;
+
 // This function triggers whenever you run ifconfig wlan0 destroy
 static void
 i3e_vap_delete(struct ieee80211vap *vap)
@@ -114,6 +122,9 @@ i3e_detach(struct i3e_softc *sc)
 	I3E_LOCK(sc);
 	sc->sc_detached = 1;
 	I3E_UNLOCK(sc);
+
+	if (sc->dev)
+		destroy_dev(sc->dev);
 
 	mbufq_drain(&sc->sc_snd);
 	mtx_destroy(&sc->sc_mtx);
@@ -385,7 +396,10 @@ i3e_newstate(struct ieee80211vap *vap, enum ieee80211_state nstate, int arg)
 	struct i3e_softc *sc = ic->ic_softc;
 	enum ieee80211_state ostate;
 
-	// I am not clear on the locking mechanism below, see here: https://lists.freebsd.org/archives/freebsd-wireless/2023-November/001627.html
+	/*
+	 * I am not clear on the locking mechanism below, See here:
+	 * https://lists.freebsd.org/archives/freebsd-wireless/2023-November/001627.html
+	 */
 	IEEE80211_UNLOCK(ic);
 	I3E_LOCK(sc);
 
@@ -559,7 +573,8 @@ i3e_getradiocaps(struct ieee80211com *ic, int maxchans, int *nchans,
 	ieee80211_add_channels_default_2ghz(chans, maxchans, nchans, bands, 0);
 }
 
-static int i3e_wme_update(struct ieee80211com *ic)
+static int
+i3e_wme_update(struct ieee80211com *ic)
 {
 	return (0);
 }
@@ -578,12 +593,13 @@ i3e_node_alloc(struct ieee80211vap *vap, const uint8_t mac[IEEE80211_ADDR_LEN])
 
 	in = malloc(sizeof(struct i3e_node), M_80211_NODE, M_NOWAIT | M_ZERO);
 	if (in == NULL) {
-		printf("i3e: Unable to allocate node\n");
+		printf("i3e: Unable to allocat/e node\n");
 	}
 	return (struct ieee80211_node *)in;
 }
 
-static int i3e_attach(struct i3e_softc *sc)
+static int
+i3e_attach(struct i3e_softc *sc)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
 
@@ -638,45 +654,80 @@ static int i3e_attach(struct i3e_softc *sc)
 	ic->ic_update_mcast = i3e_update_mcast;
 	ic->ic_wme.wme_update = i3e_wme_update;
 
+	sc->dev = make_dev(&i3e_cdevsw, 0, UID_ROOT,
+		GID_OPERATOR, 0600, "i3e%d", 0);
+	sc->dev->si_drv1 = sc;
+
+	// This announces the interface in the kernel messages
 	ieee80211_announce(ic);
 
 	return 0;
 }
 
-static int i3e_event_handler(struct module *module, int event_type, void *arg) {
-
+static int
+i3e_event_handler(struct module *module, int event_type, void *arg)
+{
   int ret = 0;						// function returns an integer error code, default 0 for OK
 
   switch (event_type) {				// event_type is an enum; let's switch on it
-    case MOD_LOAD:					// if we're loading
-  	  sc = malloc(sizeof(struct i3e_softc), M_80211_VAP, M_WAITOK | M_ZERO);
-	  i3e_attach(sc);
-      break;
+		case MOD_LOAD:					// if we're loading
+		sc = malloc(sizeof(struct i3e_softc), M_80211_VAP, M_WAITOK | M_ZERO);
+		i3e_attach(sc);
+		break;
 
-    case MOD_UNLOAD:				// if were unloading
-	  i3e_detach(sc);
-	  // This free is handled by the FreeBSD's driver, but we have to manually simulate it here
-	  free(sc, M_80211_VAP);
-      break;
+		case MOD_UNLOAD:				// if were unloading
+		i3e_detach(sc);
+		// This free is handled by the FreeBSD's driver, but we have to manually simulate it here
+		free(sc, M_80211_VAP);
+		break;
 
-    default:
-      ret = EOPNOTSUPP;
-      break;
-  }
+		default:
+		ret = EOPNOTSUPP;
+		break;
+	}
 
-  return(ret);					// return the appropriate value
+	return(ret);					// return the appropriate value
 
 }
 
-static moduledata_t i3e_data = {
-  "i3e",           // Name of our module
-  i3e_event_handler,        // Name of our module's 'event handler' function
-  NULL                      // Ignore for now :)
+static int
+i3e_write(struct cdev *dev, struct uio *uio, int ioflag)
+{
+//	uint8_t *frame;
+	int error = 0;
+
+/*
+	frame = malloc(uio->uio_resid + 1, M_DEVBUF, M_WAITOK);
+	error = uiomove(frame, uio->uio_resid, uio);
+
+	if (error)
+		goto error;
+
+	printf("Got the data: %s\n", s);
+*/
+//error:
+//	free(frame, M_BUFDEV);
+	return (error);
+}
+
+static struct cdevsw i3e_cdevsw = {
+	.d_version =	D_VERSION,
+	.d_flags =	0,
+	.d_write =	i3e_write,
+	.d_name =	"i3e",
 };
 
-// Register the module with the kernel using:
-//  the module name
-//  our recently defined moduledata_t struct with module info
-//  a module type (we're daying it's a driver this time)
-//  a preference as to when to load the module
+static moduledata_t i3e_data = {
+	"i3e",			// Name of our module
+	i3e_event_handler,	// Name of our module's 'event handler' function
+	NULL			// Not yet sure what this does
+};
+
+/*
+ * Register the module with the kernel using:
+ * 1) The module name
+ * 2) Our recently defined moduledata_t struct with module info
+ * 3) A module type (we're daying it's a driver this time)
+ * 4) A preference as to when to load the module
+ */
 DECLARE_MODULE(freebsd_i3e, i3e_data, SI_SUB_DRIVERS, SI_ORDER_MIDDLE);
